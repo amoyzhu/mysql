@@ -19,30 +19,18 @@ RUN set -x \
 
 RUN mkdir /docker-entrypoint-initdb.d
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-# for MYSQL_RANDOM_ROOT_PASSWORD
-		pwgen \
-# for mysql_ssl_rsa_setup
-		openssl \
 # FATAL ERROR: please install the following Perl modules before executing /usr/local/mysql/scripts/mysql_install_db:
 # File::Basename
 # File::Copy
 # Sys::Hostname
 # Data::Dumper
-		perl \
-	&& rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y perl pwgen --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
-RUN set -ex; \
 # gpg: key 5072E1F5: public key "MySQL Release Engineering <mysql-build@oss.oracle.com>" imported
-	key='A4A9406876FCBD3C456770C88C718D3B5072E1F5'; \
-	export GNUPGHOME="$(mktemp -d)"; \
-	gpg --keyserver ha.pool.sks-keyservers.net --recv-keys "$key"; \
-	gpg --export "$key" > /etc/apt/trusted.gpg.d/mysql.gpg; \
-	rm -r "$GNUPGHOME"; \
-	apt-key list > /dev/null
+RUN apt-key adv --keyserver ha.pool.sks-keyservers.net --recv-keys A4A9406876FCBD3C456770C88C718D3B5072E1F5
 
 ENV MYSQL_MAJOR 8.0
-ENV MYSQL_VERSION 8.0.1-dmr-1debian8
+ENV MYSQL_VERSION 8.0.0-dmr-1debian8
 
 RUN echo "deb http://repo.mysql.com/apt/debian/ jessie mysql-${MYSQL_MAJOR}" > /etc/apt/sources.list.d/mysql.list
 
@@ -63,7 +51,10 @@ RUN { \
 # comment out a few problematic configuration values
 # don't reverse lookup hostnames, they are usually another container
 RUN sed -Ei 's/^(bind-address|log)/#&/' /etc/mysql/mysql.conf.d/mysqld.cnf \
-	&& echo '[mysqld]\nskip-host-cache\nskip-name-resolve' > /etc/mysql/conf.d/docker.cnf
+	&& echo 'skip-host-cache\nskip-name-resolve' | awk '{ print } $1 == "[mysqld]" && c == 0 { c = 1; system("cat") }' /etc/mysql/mysql.conf.d/mysqld.cnf > /tmp/mysqld.cnf \
+	&& mv /tmp/mysqld.cnf /etc/mysql/mysql.conf.d/mysqld.cnf
+
+RUN sed -i '/\[mysqld\]/a server-id=1\nlog-bin' /etc/mysql/mysql.conf.d/mysqld.cnf
 
 VOLUME /var/lib/mysql
 
